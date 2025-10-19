@@ -1,20 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import { API_ENDPOINTS, apiCall } from '@/constants/api';
+import { isLoggedIn, saveToken, saveUser } from '@/utils/tokenStorage';
+import { Ionicons } from '@expo/vector-icons';
+import { Link, router } from 'expo-router';
+import React, { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  SafeAreaView,
   Alert,
   KeyboardAvoidingView,
   Platform,
+  SafeAreaView,
   StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { Link, router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { apiCall, API_ENDPOINTS } from '@/constants/api';
-import { saveToken, saveUser, isLoggedIn } from '@/utils/tokenStorage';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -88,7 +88,7 @@ export default function LoginScreen() {
       >
         <View style={styles.content}>
           <View style={styles.header}>
-            <Text style={styles.title}>Mind Plan</Text>
+            <Text style={styles.title}>F-Plan</Text>
             <Text style={styles.subtitle}>Chào mừng trở lại! Vui lòng đăng nhập vào tài khoản của bạn</Text>
           </View>
 
