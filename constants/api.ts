@@ -1,5 +1,5 @@
 // API Configuration
-export const API_BASE_URL = 'http://192.168.0.103:3000/api';
+export const API_BASE_URL = 'https://yourday-2t08.onrender.com/api';
 
 // API endpoints
 export const API_ENDPOINTS = {
