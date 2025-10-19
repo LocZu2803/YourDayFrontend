@@ -1,21 +1,25 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  SafeAreaView,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-  TextInput,
-  Modal,
-} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import { router } from 'expo-router';
+import React, { useCallback, useState } from 'react';
+import {
+  Modal,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
-import { getUser, getToken, saveUser, User } from '@/utils/tokenStorage';
+import { CustomAlert } from '@/components/ui/custom-alert';
+import { Toast } from '@/components/ui/toast';
+import { API_ENDPOINTS, apiCall } from '@/constants/api';
+import { useCustomAlert } from '@/hooks/useCustomAlert';
+import { useToast } from '@/hooks/useToast';
 import { logout } from '@/utils/auth';
-import { apiCall, API_ENDPOINTS } from '@/constants/api';
+import { getToken, getUser, User } from '@/utils/tokenStorage';
 
 interface PasswordChangeData {
   currentPassword: string;
@@ -23,7 +27,14 @@ interface PasswordChangeData {
   confirmPassword: string;
 }
 
+interface DeleteAccountData {
+  password: string;
+}
+
 export default function AccountScreen() {
+  const { alert, showAlert, hideAlert } = useCustomAlert();
+  const { toast, showToast, hideToast } = useToast();
+  
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -42,6 +53,13 @@ export default function AccountScreen() {
     new: false,
     confirm: false,
   });
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteAccountData, setDeleteAccountData] = useState<DeleteAccountData>({
+    password: '',
+  });
+  const [deletePasswordError, setDeletePasswordError] = useState('');
+  const [showDeletePassword, setShowDeletePassword] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Load user data when screen focuses
   useFocusEffect(
@@ -56,7 +74,7 @@ export default function AccountScreen() {
       setUser(userData);
     } catch (error) {
       console.error('Error loading user data:', error);
-      Alert.alert('Lỗi', 'Không thể tải thông tin tài khoản');
+      showToast('Không thể tải thông tin tài khoản', 'error');
     } finally {
       setLoading(false);
     }
@@ -119,7 +137,7 @@ export default function AccountScreen() {
     try {
       const token = await getToken();
       if (!token) {
-        Alert.alert('Lỗi', 'Không tìm thấy token xác thực');
+        showToast('Không tìm thấy token xác thực', 'error');
         return;
       }
 
@@ -147,16 +165,16 @@ export default function AccountScreen() {
           newPassword: '',
           confirmPassword: '',
         });
-        Alert.alert('Thành công', 'Đã thay đổi mật khẩu thành công');
+        showToast('Đã thay đổi mật khẩu thành công', 'success');
       }
     } catch (error: any) {
       console.error('Password change error:', error);
-      Alert.alert('Lỗi', error.message || 'Không thể thay đổi mật khẩu');
+      showToast(error.message || 'Không thể thay đổi mật khẩu', 'error');
     }
   };
 
   const handleLogout = () => {
-    Alert.alert(
+    showAlert(
       'Đăng xuất',
       'Bạn có chắc muốn đăng xuất khỏi tài khoản?',
       [
@@ -166,7 +184,80 @@ export default function AccountScreen() {
           style: 'destructive',
           onPress: logout,
         },
-      ]
+      ],
+      'warning'
+    );
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!deleteAccountData.password.trim()) {
+      setDeletePasswordError('Vui lòng nhập mật khẩu để xác nhận');
+      return;
+    }
+
+    setIsDeleting(true);
+
+    try {
+      const token = await getToken();
+      if (!token) {
+        showToast('Không tìm thấy token xác thực', 'error');
+        setIsDeleting(false);
+        return;
+      }
+
+      const response = await apiCall(API_ENDPOINTS.AUTH.DELETE_ACCOUNT, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          password: deleteAccountData.password,
+        }),
+      });
+
+      if (response.message) {
+        setShowDeleteModal(false);
+        showAlert(
+          'Thành công',
+          'Tài khoản đã được xóa thành công',
+          [
+            {
+              text: 'OK',
+              onPress: logout,
+            },
+          ],
+          'success'
+        );
+      }
+    } catch (error: any) {
+      console.error('Delete account error:', error);
+      showToast(error.message || 'Không thể xóa tài khoản. Vui lòng kiểm tra lại mật khẩu.', 'error');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const clearDeleteModal = () => {
+    setDeleteAccountData({ password: '' });
+    setDeletePasswordError('');
+    setShowDeletePassword(false);
+    setShowDeleteModal(false);
+  };
+
+  const confirmDeleteAccount = () => {
+    showAlert(
+      'Xóa tài khoản',
+      'Hành động này không thể hoàn tác. Tất cả dữ liệu của bạn sẽ bị xóa vĩnh viễn. Bạn có chắc chắn muốn tiếp tục?',
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Xóa tài khoản',
+          style: 'destructive',
+          onPress: () => setShowDeleteModal(true),
+        },
+      ],
+      'warning'
     );
   };
 
@@ -203,7 +294,7 @@ export default function AccountScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>Không thể tải thông tin tài khoản</Text>
+          <Text style={styles.errorContainerText}>Không thể tải thông tin tài khoản</Text>
           <TouchableOpacity onPress={loadUserData} style={styles.retryButton}>
             <Text style={styles.retryButtonText}>Thử lại</Text>
           </TouchableOpacity>
@@ -253,6 +344,20 @@ export default function AccountScreen() {
             </View>
             <Ionicons name="chevron-forward" size={20} color="#64748B" />
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => router.push('/reminders/daily')}
+          >
+            <View style={styles.menuIcon}>
+              <Ionicons name="alarm-outline" size={24} color="#8B5CF6" />
+            </View>
+            <View style={styles.menuContent}>
+              <Text style={styles.menuText}>Nhắc nhở hàng ngày</Text>
+              <Text style={styles.menuSubtext}>Nhắc xem lịch trình mỗi ngày</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#64748B" />
+          </TouchableOpacity>
         </View>
 
         {/* Security Section */}
@@ -277,7 +382,104 @@ export default function AccountScreen() {
             <Text style={styles.logoutText}>Đăng xuất</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Danger Zone */}
+        <View style={styles.section}>
+          <Text style={styles.dangerSectionTitle}>Vùng nguy hiểm</Text>
+          <TouchableOpacity 
+            style={styles.deleteAccountButton} 
+            onPress={confirmDeleteAccount}
+          >
+            <View style={styles.deleteAccountContent}>
+              <View style={styles.deleteAccountIcon}>
+                <Ionicons name="trash-outline" size={24} color="#DC2626" />
+              </View>
+              <View style={styles.deleteAccountInfo}>
+                <Text style={styles.deleteAccountText}>Xóa tài khoản</Text>
+                <Text style={styles.deleteAccountSubtext}>
+                  Xóa vĩnh viễn tài khoản và toàn bộ dữ liệu
+                </Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
+
+      {/* Delete Account Modal */}
+      <Modal visible={showDeleteModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.dangerModalTitle}>Xóa tài khoản</Text>
+              <TouchableOpacity onPress={clearDeleteModal} disabled={isDeleting}>
+                <Ionicons name="close" size={24} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalContent}>
+              <View style={styles.dangerWarning}>
+                <Ionicons name="warning" size={32} color="#DC2626" />
+                <Text style={styles.dangerWarningText}>
+                  Tài khoản của bạn sẽ bị xóa vĩnh viễn và không thể khôi phục!
+                </Text>
+              </View>
+
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>Nhập mật khẩu để xác nhận</Text>
+                <View style={styles.passwordContainer}>
+                  <TextInput
+                    style={[styles.passwordInput, deletePasswordError ? styles.inputError : null]}
+                    value={deleteAccountData.password}
+                    onChangeText={(text) => {
+                      setDeleteAccountData({ password: text });
+                      if (deletePasswordError) {
+                        setDeletePasswordError('');
+                      }
+                    }}
+                    placeholder="Nhập mật khẩu"
+                    secureTextEntry={!showDeletePassword}
+                    autoCapitalize="none"
+                    editable={!isDeleting}
+                  />
+                  <TouchableOpacity
+                    style={styles.eyeButton}
+                    onPress={() => setShowDeletePassword(!showDeletePassword)}
+                    disabled={isDeleting}
+                  >
+                    <Ionicons
+                      name={showDeletePassword ? "eye-off" : "eye"}
+                      size={18}
+                      color="#64748B"
+                    />
+                  </TouchableOpacity>
+                </View>
+                {deletePasswordError ? (
+                  <Text style={styles.errorText}>{deletePasswordError}</Text>
+                ) : null}
+              </View>
+
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  onPress={clearDeleteModal}
+                  style={[styles.modalButton, styles.cancelButton]}
+                  disabled={isDeleting}
+                >
+                  <Text style={styles.cancelButtonText}>Hủy</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleDeleteAccount}
+                  style={[styles.modalButton, styles.deleteButton]}
+                  disabled={isDeleting}
+                >
+                  <Text style={styles.deleteButtonText}>
+                    {isDeleting ? 'Đang xóa...' : 'Xóa tài khoản'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Password Change Modal */}
       <Modal visible={showPasswordModal} transparent animationType="fade">
@@ -415,6 +617,24 @@ export default function AccountScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Toast Notification */}
+      <Toast
+        visible={toast.visible}
+        type={toast.type}
+        message={toast.message}
+        onHide={hideToast}
+      />
+
+      {/* Custom Alert */}
+      <CustomAlert
+        visible={alert.visible}
+        type={alert.type}
+        title={alert.title}
+        message={alert.message}
+        buttons={alert.buttons}
+        onClose={hideAlert}
+      />
     </SafeAreaView>
   );
 }
@@ -572,7 +792,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 40,
   },
-  errorText: {
+  errorContainerText: {
     fontSize: 18,
     color: '#EF4444',
     textAlign: 'center',
@@ -703,6 +923,81 @@ const styles = StyleSheet.create({
     backgroundColor: '#3B82F6',
   },
   saveButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+
+  // Danger Zone
+  dangerSectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#DC2626',
+    marginBottom: 16,
+  },
+  deleteAccountButton: {
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+    borderRadius: 12,
+    backgroundColor: '#FEF2F2',
+    overflow: 'hidden',
+  },
+  deleteAccountContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
+  deleteAccountIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FEE2E2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  deleteAccountInfo: {
+    flex: 1,
+  },
+  deleteAccountText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#DC2626',
+    marginBottom: 2,
+  },
+  deleteAccountSubtext: {
+    fontSize: 13,
+    color: '#991B1B',
+  },
+
+  // Delete Account Modal
+  dangerModalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#DC2626',
+  },
+  dangerWarning: {
+    backgroundColor: '#FEF2F2',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+    alignItems: 'center',
+  },
+  dangerWarningText: {
+    fontSize: 14,
+    color: '#991B1B',
+    textAlign: 'center',
+    marginTop: 8,
+    lineHeight: 20,
+    fontWeight: '500',
+  },
+  deleteButton: {
+    backgroundColor: '#DC2626',
+  },
+  deleteButtonText: {
     color: '#FFFFFF',
     fontWeight: '600',
     fontSize: 14,

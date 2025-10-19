@@ -65,7 +65,7 @@ export const validateToken = async (): Promise<boolean> => {
     const token = await getToken();
     if (!token) return false;
 
-    const { apiCall, API_ENDPOINTS } = await import('@/constants/api');
+    const { apiCall, API_ENDPOINTS } = await import('../constants/api');
 
     const response = await apiCall(API_ENDPOINTS.AUTH.PROFILE, {
       method: 'GET',

@@ -1,6 +1,7 @@
 import { API_ENDPOINTS, apiCall } from '@/constants/api';
 import { CreateTaskRequest, Task, UpdateTaskRequest } from '@/types/task';
 import { getToken } from '@/utils/tokenStorage';
+import { cacheService } from './cacheService';
 
 export class TaskService {
   private static async getAuthHeaders(): Promise<Record<string, string>> {
@@ -28,24 +29,54 @@ export class TaskService {
     }
 
     const endpoint = `${API_ENDPOINTS.TASKS.LIST}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
+    
+    // Create cache key
+    const cacheKey = `tasks_${endpoint}`;
+    
+    // Check cache first
+    const cachedData = cacheService.get(cacheKey);
+    if (cachedData) {
+      return cachedData;
+    }
 
     const response = await apiCall(endpoint, {
       method: 'GET',
       headers: await this.getAuthHeaders(),
     });
 
-    return response.tasks.map(this.transformTaskFromAPI);
+    const tasks = response.tasks.map(this.transformTaskFromAPI);
+    
+    // Cache the result for 2 minutes
+    cacheService.set(cacheKey, tasks, 2 * 60 * 1000);
+
+    return tasks;
   }
 
   static async getTask(id: string): Promise<Task> {
     const endpoint = API_ENDPOINTS.TASKS.GET.replace(':id', id);
-    console.log('TaskService - Getting task:', { id, endpoint });
+    
+    // Create cache key for individual task
+    const cacheKey = `task_${id}`;
+    
+    // Check cache first
+    const cachedData = cacheService.get(cacheKey);
+    if (cachedData) {
+      console.log('TaskService - Getting task from cache:', { id });
+      return cachedData;
+    }
+
+    console.log('TaskService - Getting task from API:', { id, endpoint });
     const response = await apiCall(endpoint, {
       method: 'GET',
       headers: await this.getAuthHeaders(),
     });
 
-    return this.transformTaskFromAPI(response.task);
+    const task = this.transformTaskFromAPI(response.task);
+    
+    // Cache the result for 5 minutes
+    cacheService.set(cacheKey, task, 5 * 60 * 1000);
+
+    return task;
   }
 
   static async createTask(taskData: CreateTaskRequest): Promise<Task> {
@@ -97,17 +128,22 @@ export class TaskService {
       });
 
       console.log('TaskService - Task created successfully!');
+      
+      // Clear tasks cache when creating new task
+      cacheService.clearByPattern('tasks_');
+      // Note: No individual task cache to clear for new task
+      
       return this.transformTaskFromAPI(response.task);
-    } catch (error) {
+    } catch (error: any) {
       console.error('TaskService - Create task failed:', {
-        error: error.message,
+        error: error?.message,
         requestBody: Object.keys(requestBody),
         hasValidTitle: !!requestBody.title && requestBody.title.trim().length > 0,
         hasValidTimes: !!requestBody.startTime && !!requestBody.endTime,
       });
 
       // Parse server error response to get more details
-      if (error.message.includes('overlaps with existing task') && error.response) {
+      if (error?.message?.includes('overlaps with existing task') && error?.response) {
         try {
           const errorData = await error.response.json();
           if (errorData.conflictingTask) {
@@ -157,10 +193,16 @@ export class TaskService {
       });
 
       console.log('TaskService - Task updated successfully!');
+      
+      // Clear tasks cache when updating task
+      cacheService.clearByPattern('tasks_');
+      // Clear individual task cache
+      cacheService.clearByPattern(`task_${taskData.id}`);
+      
       return this.transformTaskFromAPI(response.task);
-    } catch (error) {
+    } catch (error: any) {
       console.error('TaskService - Update task failed:', {
-        error: error.message,
+        error: error?.message,
         requestBody: Object.keys(requestBody),
       });
 
@@ -183,9 +225,14 @@ export class TaskService {
       });
 
       console.log('TaskService - Task deleted successfully!');
-    } catch (error) {
+      
+      // Clear tasks cache when deleting task
+      cacheService.clearByPattern('tasks_');
+      // Clear individual task cache
+      cacheService.clearByPattern(`task_${id}`);
+    } catch (error: any) {
       console.error('TaskService - Delete task failed:', {
-        error: error.message,
+        error: error?.message,
         taskId: id,
       });
 

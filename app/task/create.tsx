@@ -16,9 +16,12 @@ import {
   View,
 } from 'react-native';
 
+import { LunarDatePicker } from '@/components/ui/lunar-date-picker';
 import { TaskService } from '@/services/taskService';
+import { DayOfWeek, DayOfWeekShortLabels } from '@/types/reminder';
 import { CreateTaskRequest, TaskCategory, TaskCategoryColors, TaskCategoryLabels } from '@/types/task';
 import { formatDate, formatTime } from '@/utils/dateUtils';
+import { formatLunarDate, type LunarDate } from '@/utils/lunarCalendar';
 
 export default function CreateTaskScreen() {
   const [title, setTitle] = useState('');
@@ -52,8 +55,44 @@ export default function CreateTaskScreen() {
   const [showReminderPicker, setShowReminderPicker] = useState(false);
   const [showReminderOptions, setShowReminderOptions] = useState(false);
   const [tempDate, setTempDate] = useState<Date | null>(null);
+  const [showLunarPicker, setShowLunarPicker] = useState(false);
+  const [selectedLunarDate, setSelectedLunarDate] = useState<LunarDate | null>(null);
+  const [reminderType, setReminderType] = useState<'time' | 'weekday' | 'days-before' | null>(null);
+  const [reminderWeekdays, setReminderWeekdays] = useState<DayOfWeek[]>([]);
+  const [showWeekdayPicker, setShowWeekdayPicker] = useState(false);
+  const [daysBefore, setDaysBefore] = useState<number | undefined>();
+  const [showDaysBeforeOptions, setShowDaysBeforeOptions] = useState(false);
+  const [customReminderDate, setCustomReminderDate] = useState<Date | undefined>();
+  const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
+  const [showCustomTimePicker, setShowCustomTimePicker] = useState(false);
 
   const scrollViewRef = useRef<ScrollView>(null);
+
+  // Function to clear all reminder data when switching types
+  const clearAllReminders = () => {
+    setReminderTime(undefined);
+    setReminderWeekdays([]);
+    setDaysBefore(undefined);
+    setCustomReminderDate(undefined);
+    setShowReminderOptions(false);
+    setShowWeekdayPicker(false);
+    setShowDaysBeforeOptions(false);
+    setShowCustomDatePicker(false);
+    setShowCustomTimePicker(false);
+  };
+
+  // Function to handle reminder type change
+  const handleReminderTypeChange = (newType: 'time' | 'weekday' | 'days-before') => {
+    if (reminderType === newType) {
+      // If clicking the same type, clear it
+      setReminderType(null);
+      clearAllReminders();
+    } else {
+      // Switch to new type and clear others
+      setReminderType(newType);
+      clearAllReminders();
+    }
+  };
 
   const handleSave = async () => {
     // Validate title
@@ -116,14 +155,14 @@ export default function CreateTaskScreen() {
       Alert.alert('Thành công', 'Đã tạo lịch trình mới', [
         { text: 'OK', onPress: () => router.back() }
       ]);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Create task error:', error);
 
       // Handle specific error cases with user-friendly messages
       let errorTitle = 'Lỗi';
       let errorMessage = 'Không thể tạo lịch trình';
 
-      if (error.message.includes('overlaps with existing task')) {
+      if (error?.message?.includes('overlaps with existing task')) {
         errorTitle = 'Trùng lịch';
         if (error.conflictingTask) {
           const conflict = error.conflictingTask;
@@ -133,17 +172,17 @@ export default function CreateTaskScreen() {
         } else {
           errorMessage = 'Thời gian này đã có lịch trình khác. Vui lòng chọn thời gian khác hoặc chỉnh sửa lịch hiện tại.';
         }
-      } else if (error.message.includes('required')) {
+      } else if (error?.message?.includes('required')) {
         errorTitle = 'Thiếu thông tin';
         errorMessage = 'Vui lòng điền đầy đủ thông tin bắt buộc (tên sự kiện, thời gian bắt đầu, thời gian kết thúc).';
-      } else if (error.message.includes('Invalid date')) {
+      } else if (error?.message?.includes('Invalid date')) {
         errorTitle = 'Thời gian không hợp lệ';
         errorMessage = 'Vui lòng kiểm tra lại thời gian bắt đầu và kết thúc.';
-      } else if (error.message.includes('End time must be after start time')) {
+      } else if (error?.message?.includes('End time must be after start time')) {
         errorTitle = 'Thời gian không hợp lệ';
         errorMessage = 'Thời gian kết thúc phải sau thời gian bắt đầu.';
       } else {
-        errorMessage = `Đã xảy ra lỗi: ${error.message}`;
+        errorMessage = `Đã xảy ra lỗi: ${error?.message || 'Không xác định'}`;
       }
 
       Alert.alert(errorTitle, errorMessage, [
@@ -315,6 +354,111 @@ export default function CreateTaskScreen() {
     return `${formatTime(reminderTime)} (tùy chỉnh)`;
   };
 
+  const handleLunarDateSelect = (date: Date, lunarDate: LunarDate) => {
+    // Keep the current time, only update the date
+    const newStartTime = new Date(date);
+    newStartTime.setHours(startTime.getHours(), startTime.getMinutes());
+    setStartTime(newStartTime);
+
+    const newEndTime = new Date(date);
+    newEndTime.setHours(endTime.getHours(), endTime.getMinutes());
+    setEndTime(newEndTime);
+
+    setSelectedLunarDate(lunarDate);
+  };
+
+  const toggleWeekday = (day: DayOfWeek) => {
+    if (reminderWeekdays.includes(day)) {
+      setReminderWeekdays(reminderWeekdays.filter(d => d !== day));
+    } else {
+      setReminderWeekdays([...reminderWeekdays, day]);
+    }
+  };
+
+  const selectWeekdays = () => {
+    setReminderWeekdays([
+      DayOfWeek.MONDAY,
+      DayOfWeek.TUESDAY,
+      DayOfWeek.WEDNESDAY,
+      DayOfWeek.THURSDAY,
+      DayOfWeek.FRIDAY,
+    ]);
+  };
+
+  const selectWeekend = () => {
+    setReminderWeekdays([DayOfWeek.SATURDAY, DayOfWeek.SUNDAY]);
+  };
+
+  const selectAllDays = () => {
+    setReminderWeekdays(Object.values(DayOfWeek));
+  };
+
+  const getWeekdayReminderLabel = () => {
+    if (reminderWeekdays.length === 0) return 'Chọn ngày nhắc nhở';
+    if (reminderWeekdays.length === 7) return 'Nhắc mỗi ngày';
+    if (reminderWeekdays.length === 5 && 
+        !reminderWeekdays.includes(DayOfWeek.SATURDAY) && 
+        !reminderWeekdays.includes(DayOfWeek.SUNDAY)) {
+      return 'Nhắc T2 - T6';
+    }
+    if (reminderWeekdays.length === 2 && 
+        reminderWeekdays.includes(DayOfWeek.SATURDAY) && 
+        reminderWeekdays.includes(DayOfWeek.SUNDAY)) {
+      return 'Nhắc cuối tuần';
+    }
+    return reminderWeekdays.map(d => DayOfWeekShortLabels[d]).join(', ');
+  };
+
+  const daysBeforeOptions = [
+    { label: 'Trước 1 ngày', value: 1 },
+    { label: 'Trước 2 ngày', value: 2 },
+    { label: 'Trước 3 ngày', value: 3 },
+    { label: 'Trước 1 tuần (7 ngày)', value: 7 },
+    { label: 'Tùy chỉnh', value: -1 },
+  ];
+
+  const handleDaysBeforeSelect = (value: number) => {
+    setShowDaysBeforeOptions(false);
+    if (value === -1) {
+      // Show custom date picker
+      setTimeout(() => {
+        setShowCustomDatePicker(true);
+      }, 200);
+    } else {
+      setDaysBefore(value);
+      setCustomReminderDate(undefined);
+    }
+  };
+
+  const handleCustomDateSelect = () => {
+    if (customReminderDate) {
+      setShowCustomDatePicker(false);
+      // Sau khi chọn ngày, hiển thị time picker
+      setTimeout(() => {
+        setShowCustomTimePicker(true);
+      }, 200);
+    }
+  };
+
+  const handleCustomTimeSelect = () => {
+    if (customReminderDate) {
+      setDaysBefore(undefined);
+      setShowCustomTimePicker(false);
+    }
+  };
+
+  const getDaysBeforeLabel = () => {
+    if (customReminderDate) {
+      return `Nhắc vào ${formatDate(customReminderDate)} lúc ${formatTime(customReminderDate)}`;
+    }
+    if (!daysBefore) return 'Chọn ngày nhắc nhở';
+    if (daysBefore === 1) return 'Trước 1 ngày';
+    if (daysBefore === 2) return 'Trước 2 ngày';
+    if (daysBefore === 3) return 'Trước 3 ngày';
+    if (daysBefore === 7) return 'Trước 1 tuần (7 ngày)';
+    return `Trước ${daysBefore} ngày`;
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -371,17 +515,35 @@ export default function CreateTaskScreen() {
 
           {/* Date */}
           <View style={styles.section}>
-            <Text style={styles.label}>Ngày</Text>
-            <TouchableOpacity
-              style={styles.dateTimeButton}
-              onPress={() => {
-                setTempDate(startTime);
-                setShowStartDatePicker(true);
-              }}
-            >
-              <Ionicons name="calendar-outline" size={20} color="#64748B" />
-              <Text style={styles.dateTimeText}>{formatDate(startTime)}</Text>
-            </TouchableOpacity>
+            <View style={styles.labelRow}>
+              <Text style={styles.label}>Ngày</Text>
+              {selectedLunarDate && (
+                <View style={styles.lunarBadge}>
+                  <Ionicons name="moon" size={12} color="#F59E0B" />
+                  <Text style={styles.lunarBadgeText}>
+                    {formatLunarDate(selectedLunarDate)}
+                  </Text>
+                </View>
+              )}
+            </View>
+            <View style={styles.dateButtonsRow}>
+              <TouchableOpacity
+                style={[styles.dateTimeButton, styles.dateButtonMain]}
+                onPress={() => {
+                  setTempDate(startTime);
+                  setShowStartDatePicker(true);
+                }}
+              >
+                <Ionicons name="calendar-outline" size={20} color="#64748B" />
+                <Text style={styles.dateTimeText}>{formatDate(startTime)}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.lunarButton}
+                onPress={() => setShowLunarPicker(true)}
+              >
+                <Ionicons name="moon" size={20} color="#F59E0B" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Time */}
@@ -451,47 +613,246 @@ export default function CreateTaskScreen() {
           {/* Reminder */}
           <View style={styles.section}>
             <Text style={styles.label}>Nhắc nhở</Text>
-            <TouchableOpacity
-              style={styles.dateTimeButton}
-              onPress={handleReminderButtonPress}
-            >
-              <Ionicons name="notifications-outline" size={20} color="#64748B" />
-              <Text style={styles.dateTimeText}>
-                {getReminderLabel()}
-              </Text>
-            </TouchableOpacity>
-            {reminderTime && (
+
+            {/* Reminder Type Toggle */}
+            <View style={styles.reminderTypeToggle}>
               <TouchableOpacity
-                style={styles.clearReminderButton}
-                onPress={() => setReminderTime(undefined)}
+                style={[
+                  styles.reminderTypeButton,
+                  styles.reminderTypeButtonThree,
+                  reminderType === 'time' && styles.reminderTypeButtonActive
+                ]}
+                onPress={() => handleReminderTypeChange('time')}
               >
-                <Text style={styles.clearReminderText}>Xóa nhắc nhở</Text>
+                <Ionicons 
+                  name="time-outline" 
+                  size={16} 
+                  color={reminderType === 'time' ? '#3B82F6' : '#64748B'} 
+                />
+                <Text style={[
+                  styles.reminderTypeText,
+                  styles.reminderTypeTextSmall,
+                  reminderType === 'time' && styles.reminderTypeTextActive
+                ]}>
+                  Theo giờ
+                </Text>
               </TouchableOpacity>
-            )}
+              <TouchableOpacity
+                style={[
+                  styles.reminderTypeButton,
+                  styles.reminderTypeButtonThree,
+                  reminderType === 'days-before' && styles.reminderTypeButtonActive
+                ]}
+                onPress={() => handleReminderTypeChange('days-before')}
+              >
+                <Ionicons 
+                  name="calendar-number-outline" 
+                  size={16} 
+                  color={reminderType === 'days-before' ? '#3B82F6' : '#64748B'} 
+                />
+                <Text style={[
+                  styles.reminderTypeText,
+                  styles.reminderTypeTextSmall,
+                  reminderType === 'days-before' && styles.reminderTypeTextActive
+                ]}>
+                  Theo ngày
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.reminderTypeButton,
+                  styles.reminderTypeButtonThree,
+                  reminderType === 'weekday' && styles.reminderTypeButtonActive
+                ]}
+                onPress={() => handleReminderTypeChange('weekday')}
+              >
+                <Ionicons 
+                  name="repeat-outline" 
+                  size={16} 
+                  color={reminderType === 'weekday' ? '#3B82F6' : '#64748B'} 
+                />
+                <Text style={[
+                  styles.reminderTypeText,
+                  styles.reminderTypeTextSmall,
+                  reminderType === 'weekday' && styles.reminderTypeTextActive
+                ]}>
+                  Lặp lại
+                </Text>
+              </TouchableOpacity>
+            </View>
 
-            {/* Reminder Options Modal */}
-            {showReminderOptions && (
-              <View style={styles.reminderOptionsModal}>
-                {reminderOptions.map((option) => (
-                  <TouchableOpacity
-                    key={option.value}
-                    style={styles.reminderOption}
-                    onPress={() => handleReminderOptionSelect(option.value)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.reminderOptionText}>{option.label}</Text>
-                  </TouchableOpacity>
-                ))}
-                <TouchableOpacity
-                  style={[styles.reminderOption, styles.cancelOption]}
-                  onPress={() => setShowReminderOptions(false)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.reminderOptionText, styles.cancelText]}>Hủy</Text>
-                </TouchableOpacity>
+            {!reminderType ? (
+              <View style={styles.noReminderSelected}>
+                <Ionicons name="notifications-off-outline" size={24} color="#9CA3AF" />
+                <Text style={styles.noReminderText}>Chọn loại nhắc nhở ở trên</Text>
               </View>
-            )}
+            ) : reminderType === 'time' ? (
+              <>
+                <TouchableOpacity
+                  style={styles.dateTimeButton}
+                  onPress={handleReminderButtonPress}
+                >
+                  <Ionicons name="notifications-outline" size={20} color="#64748B" />
+                  <Text style={styles.dateTimeText}>
+                    {getReminderLabel()}
+                  </Text>
+                </TouchableOpacity>
+                {reminderTime && (
+                  <TouchableOpacity
+                    style={styles.clearReminderButton}
+                    onPress={() => setReminderTime(undefined)}
+                  >
+                    <Text style={styles.clearReminderText}>Xóa nhắc nhở</Text>
+                  </TouchableOpacity>
+                )}
 
+                {/* Reminder Options Modal */}
+                {showReminderOptions && (
+                  <View style={styles.reminderOptionsModal}>
+                    {reminderOptions.map((option) => (
+                      <TouchableOpacity
+                        key={option.value}
+                        style={styles.reminderOption}
+                        onPress={() => handleReminderOptionSelect(option.value)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.reminderOptionText}>{option.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                    <TouchableOpacity
+                      style={[styles.reminderOption, styles.cancelOption]}
+                      onPress={() => setShowReminderOptions(false)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.reminderOptionText, styles.cancelText]}>Hủy</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </>
+            ) : reminderType === 'days-before' ? (
+              <>
+                <TouchableOpacity
+                  style={styles.dateTimeButton}
+                  onPress={() => setShowDaysBeforeOptions(!showDaysBeforeOptions)}
+                >
+                  <Ionicons name="calendar-number-outline" size={20} color="#64748B" />
+                  <Text style={styles.dateTimeText}>
+                    {getDaysBeforeLabel()}
+                  </Text>
+                </TouchableOpacity>
+
+                {showDaysBeforeOptions && (
+                  <View style={styles.reminderOptionsModal}>
+                    {daysBeforeOptions.map((option) => (
+                      <TouchableOpacity
+                        key={option.value}
+                        style={styles.reminderOption}
+                        onPress={() => handleDaysBeforeSelect(option.value)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.reminderOptionText}>{option.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                    <TouchableOpacity
+                      style={[styles.reminderOption, styles.cancelOption]}
+                      onPress={() => setShowDaysBeforeOptions(false)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.reminderOptionText, styles.cancelText]}>Hủy</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {(daysBefore || customReminderDate) && (
+                  <TouchableOpacity
+                    style={styles.clearReminderButton}
+                    onPress={() => {
+                      setDaysBefore(undefined);
+                      setCustomReminderDate(undefined);
+                    }}
+                  >
+                    <Text style={styles.clearReminderText}>Xóa nhắc nhở</Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            ) : (
+              <>
+                <TouchableOpacity
+                  style={styles.dateTimeButton}
+                  onPress={() => setShowWeekdayPicker(!showWeekdayPicker)}
+                >
+                  <Ionicons name="calendar-outline" size={20} color="#64748B" />
+                  <Text style={styles.dateTimeText}>
+                    {getWeekdayReminderLabel()}
+                  </Text>
+                </TouchableOpacity>
+
+                {showWeekdayPicker && (
+                  <View style={styles.weekdayPickerModal}>
+                    {/* Quick Select */}
+                    <View style={styles.quickSelectRow}>
+                      <TouchableOpacity
+                        style={styles.quickSelectButton}
+                        onPress={selectAllDays}
+                      >
+                        <Text style={styles.quickSelectText}>Hàng ngày</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.quickSelectButton}
+                        onPress={selectWeekdays}
+                      >
+                        <Text style={styles.quickSelectText}>T2 - T6</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.quickSelectButton}
+                        onPress={selectWeekend}
+                      >
+                        <Text style={styles.quickSelectText}>Cuối tuần</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* Day Selection */}
+                    <View style={styles.weekdayGrid}>
+                      {Object.values(DayOfWeek).map((day) => (
+                        <TouchableOpacity
+                          key={day}
+                          style={[
+                            styles.weekdayButton,
+                            reminderWeekdays.includes(day) && styles.weekdayButtonSelected,
+                          ]}
+                          onPress={() => toggleWeekday(day)}
+                        >
+                          <Text
+                            style={[
+                              styles.weekdayButtonText,
+                              reminderWeekdays.includes(day) && styles.weekdayButtonTextSelected,
+                            ]}
+                          >
+                            {DayOfWeekShortLabels[day]}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    <TouchableOpacity
+                      style={styles.weekdayDoneButton}
+                      onPress={() => setShowWeekdayPicker(false)}
+                    >
+                      <Text style={styles.weekdayDoneText}>Xong</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {reminderWeekdays.length > 0 && (
+                  <TouchableOpacity
+                    style={styles.clearReminderButton}
+                    onPress={() => setReminderWeekdays([])}
+                  >
+                    <Text style={styles.clearReminderText}>Xóa nhắc nhở</Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
           </View>
 
           {/* Notes */}
@@ -601,6 +962,71 @@ export default function CreateTaskScreen() {
         </Modal>
       )}
 
+      {/* Lunar Date Picker */}
+      <LunarDatePicker
+        visible={showLunarPicker}
+        onClose={() => setShowLunarPicker(false)}
+        onSelect={handleLunarDateSelect}
+        initialDate={startTime}
+      />
+
+      {/* Custom Reminder Date Picker */}
+      {showCustomDatePicker && (
+        <Modal transparent={true} animationType="fade">
+          <View style={styles.pickerModalOverlay}>
+            <View style={styles.pickerModalContainer}>
+              <View style={styles.pickerHeader}>
+                <Text style={styles.pickerTitle}>Chọn ngày nhắc nhở</Text>
+                <TouchableOpacity onPress={handleCustomDateSelect}>
+                  <Text style={styles.pickerDoneButton}>Tiếp</Text>
+                </TouchableOpacity>
+              </View>
+              <DateTimePicker
+                value={customReminderDate || new Date()}
+                mode="date"
+                display="spinner"
+                onChange={(event, selectedDate) => {
+                  if (selectedDate) {
+                    setCustomReminderDate(selectedDate);
+                  }
+                }}
+                textColor="#1E293B"
+                maximumDate={startTime}
+              />
+            </View>
+          </View>
+        </Modal>
+      )}
+
+      {/* Custom Reminder Time Picker */}
+      {showCustomTimePicker && (
+        <Modal transparent={true} animationType="fade">
+          <View style={styles.pickerModalOverlay}>
+            <View style={styles.pickerModalContainer}>
+              <View style={styles.pickerHeader}>
+                <Text style={styles.pickerTitle}>Chọn giờ nhắc nhở</Text>
+                <TouchableOpacity onPress={handleCustomTimeSelect}>
+                  <Text style={styles.pickerDoneButton}>Xong</Text>
+                </TouchableOpacity>
+              </View>
+              <DateTimePicker
+                value={customReminderDate || new Date()}
+                mode="time"
+                display="spinner"
+                onChange={(event, selectedTime) => {
+                  if (selectedTime && customReminderDate) {
+                    const newDate = new Date(customReminderDate);
+                    newDate.setHours(selectedTime.getHours(), selectedTime.getMinutes());
+                    setCustomReminderDate(newDate);
+                  }
+                }}
+                textColor="#1E293B"
+              />
+            </View>
+          </View>
+        </Modal>
+      )}
+
     </SafeAreaView>
   );
 }
@@ -684,11 +1110,159 @@ const styles = StyleSheet.create({
     marginTop: 24,
     position: 'relative',
   },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
   label: {
     fontSize: 16,
     fontWeight: '600',
     color: '#374151',
-    marginBottom: 8,
+  },
+  lunarBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  lunarBadgeText: {
+    fontSize: 11,
+    color: '#92400E',
+    fontWeight: '600',
+  },
+  dateButtonsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  dateButtonMain: {
+    flex: 1,
+  },
+  lunarButton: {
+    width: 52,
+    height: 52,
+    borderRadius: 12,
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  reminderTypeToggle: {
+    flexDirection: 'row',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    padding: 3,
+    marginBottom: 12,
+  },
+  reminderTypeButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 8,
+    gap: 6,
+  },
+  reminderTypeButtonThree: {
+    paddingVertical: 8,
+    gap: 4,
+  },
+  reminderTypeButtonActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  reminderTypeText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#64748B',
+  },
+  reminderTypeTextSmall: {
+    fontSize: 12,
+  },
+  reminderTypeTextActive: {
+    color: '#3B82F6',
+    fontWeight: '600',
+  },
+  weekdayPickerModal: {
+    marginTop: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  quickSelectRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+  },
+  quickSelectButton: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+  },
+  quickSelectText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  weekdayGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  weekdayButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  weekdayButtonSelected: {
+    backgroundColor: '#3B82F6',
+    borderColor: '#3B82F6',
+  },
+  weekdayButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  weekdayButtonTextSelected: {
+    color: '#FFFFFF',
+  },
+  weekdayDoneButton: {
+    backgroundColor: '#3B82F6',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  weekdayDoneText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   input: {
     borderWidth: 1,
@@ -899,5 +1473,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#6B7280',
+  },
+  noReminderSelected: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderStyle: 'dashed',
+    gap: 8,
+  },
+  noReminderText: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    fontWeight: '500',
   },
 });

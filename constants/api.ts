@@ -1,5 +1,5 @@
 // API Configuration
-export const API_BASE_URL = 'https://yourday-2t08.onrender.com/api';
+export const API_BASE_URL = 'http://192.168.0.103:3000/api';
 
 // API endpoints
 export const API_ENDPOINTS = {
@@ -10,6 +10,7 @@ export const API_ENDPOINTS = {
     CHANGE_PASSWORD: '/auth/change-password',
     FORGOT_PASSWORD: '/auth/forgot-password',
     RESET_PASSWORD: '/auth/reset-password',
+    DELETE_ACCOUNT: '/auth/delete-account',
   },
   TASKS: {
     LIST: '/tasks',
@@ -48,8 +49,8 @@ export const apiCall = async (endpoint: string, options: RequestInit = {}) => {
     console.log('API call - Options:', {
       method: defaultOptions.method,
       headers: defaultOptions.headers,
-      bodyLength: defaultOptions.body ? defaultOptions.body.length : 0,
-      body: defaultOptions.body ? JSON.parse(defaultOptions.body as string) : null,
+      bodyLength: defaultOptions.body ? (typeof defaultOptions.body === 'string' ? defaultOptions.body.length : 'stream') : 0,
+      body: defaultOptions.body && typeof defaultOptions.body === 'string' ? JSON.parse(defaultOptions.body) : null,
     });
 
     const response = await fetch(url, defaultOptions);

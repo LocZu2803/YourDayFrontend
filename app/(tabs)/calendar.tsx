@@ -1,31 +1,30 @@
-import React, { useState, useEffect } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
-import {
-  View,
-  Text,
-  StyleSheet,
-  SafeAreaView,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
-
-import { Task, ViewMode, TaskCategory, TaskCategoryColors } from '@/types/task';
+import React, { useEffect, useState } from 'react';
 import {
-  formatDate,
-  formatTime,
-  getGreeting,
-  isToday,
-  addDays,
-  addWeeks,
-  getWeekDays,
-  createDateWithTime,
+    Alert,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+
+import { TaskService } from '@/services/taskService';
+import { Task, TaskCategoryColors, ViewMode } from '@/types/task';
+import { logout } from '@/utils/auth';
+import {
+    addDays,
+    addWeeks,
+    createDateWithTime,
+    formatTime,
+    getGreeting,
+    getWeekDays,
+    isToday
 } from '@/utils/dateUtils';
 import { getUser } from '@/utils/tokenStorage';
-import { logout } from '@/utils/auth';
-import { TaskService } from '@/services/taskService';
 
 export default function CalendarScreen() {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -42,10 +41,12 @@ export default function CalendarScreen() {
     loadTasks();
   }, [currentDate, viewMode]); // Reload when date or view mode changes
 
-  // Reload tasks when screen comes into focus
+  // Reload tasks when screen comes into focus (but not if already loading)
   useFocusEffect(
     React.useCallback(() => {
-      loadTasks();
+      if (!loading) {
+        loadTasks();
+      }
     }, [currentDate, viewMode])
   );
 

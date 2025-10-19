@@ -1,22 +1,21 @@
-import React, { useState, useEffect } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
-import {
-  View,
-  Text,
-  StyleSheet,
-  SafeAreaView,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import {
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
+} from 'react-native';
 
-import { formatTime, isToday } from '@/utils/dateUtils';
-import { Task, TaskCategoryColors } from '@/types/task';
-import { getUser } from '@/utils/tokenStorage';
 import { GreetingHeader } from '@/components/ui/greeting-header';
 import { TaskService } from '@/services/taskService';
+import { Task, TaskCategoryColors } from '@/types/task';
+import { formatTime } from '@/utils/dateUtils';
+import { getUser } from '@/utils/tokenStorage';
 
 export default function HomeScreen() {
   const [userName, setUserName] = useState('');
@@ -50,25 +49,28 @@ export default function HomeScreen() {
     try {
       setLoading(true);
 
-      // Get today's tasks
+      // Get all tasks for the next 30 days in one API call
       const today = new Date();
       const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
-      const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
-
-      const todayTasksData = await TaskService.getTasks({
-        startDate: todayStart,
-        endDate: todayEnd,
-      });
-
-      // Get upcoming tasks (next 30 days excluding today)
-      const tomorrow = new Date(today);
-      tomorrow.setDate(today.getDate() + 1);
       const thirtyDaysLater = new Date(today);
       thirtyDaysLater.setDate(today.getDate() + 30);
+      const thirtyDaysEnd = new Date(thirtyDaysLater.getFullYear(), thirtyDaysLater.getMonth(), thirtyDaysLater.getDate(), 23, 59, 59);
 
-      const upcomingTasksData = await TaskService.getTasks({
-        startDate: tomorrow,
-        endDate: thirtyDaysLater,
+      const allTasksData = await TaskService.getTasks({
+        startDate: todayStart,
+        endDate: thirtyDaysEnd,
+      });
+
+      // Filter tasks for today
+      const todayTasksData = allTasksData.filter(task => {
+        const taskDate = new Date(task.startTime);
+        return taskDate.toDateString() === today.toDateString();
+      });
+
+      // Filter tasks for upcoming (excluding today)
+      const upcomingTasksData = allTasksData.filter(task => {
+        const taskDate = new Date(task.startTime);
+        return taskDate.toDateString() !== today.toDateString();
       });
 
       setTodayTasks(todayTasksData);

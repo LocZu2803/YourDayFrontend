@@ -29,8 +29,15 @@ export default function TaskDetailScreen() {
   useFocusEffect(
     useCallback(() => {
       if (id && task && !isDeleted) {
-        // Don't show loading indicator when refreshing after edit
-        loadTask(false);
+        // Only reload if we don't have task data or if it's been a while
+        const lastFetch = task.lastFetched || 0;
+        const now = Date.now();
+        const timeSinceLastFetch = now - lastFetch;
+        
+        // Only refetch if it's been more than 30 seconds
+        if (timeSinceLastFetch > 30000) {
+          loadTask(false);
+        }
       }
     }, [id, task, isDeleted])
   );
@@ -42,7 +49,9 @@ export default function TaskDetailScreen() {
 
     try {
       const taskData = await TaskService.getTask(id!);
-      setTask(taskData);
+      // Add timestamp to track when we last fetched
+      const taskWithTimestamp = { ...taskData, lastFetched: Date.now() };
+      setTask(taskWithTimestamp);
     } catch (error) {
       console.error('Load task error:', error);
 
