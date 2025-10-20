@@ -9,7 +9,11 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.mindplan.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -48,8 +52,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "a341ddaa-23d1-4be5-9eac-f7861a4825af"
+        "projectId": "bc8bca94-d10f-4f71-a96b-66eed2bd9c32"
       }
-    }
+    },
+    "owner": "locvv"
   }
 }
