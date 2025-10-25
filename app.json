@@ -12,7 +12,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.mindplan.app",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSMotionUsageDescription": "This app uses motion data to count your steps and measure activity."
       }
     },
     "android": {
